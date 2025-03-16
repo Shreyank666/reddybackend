@@ -48,10 +48,9 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-const PORT = process.env.PORT || 8000;
-
-server.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
+// 🚀 Let Vercel manage the port assignment
+server.listen(() => {
+  logger.info(`Server running...`);
 });
 
 // Handle unhandled promise rejections
@@ -60,4 +59,4 @@ process.on('unhandledRejection', (err) => {
   // Don't crash the server
 });
 
-module.exports = { app, server, io }; 
+module.exports = { app, server, io };
