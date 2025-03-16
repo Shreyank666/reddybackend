@@ -1,30 +1,37 @@
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
-const socketIO = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const path = require('path');
+const logger = require('./utils/logger');
 
 // Import routes
 const apiRoutes = require('./routes/api');
 
-// Import WebSocket handler
-const setupSocket = require('./services/websocketClient');
-const logger = require('./utils/logger');
-
+// Create Express app
 const app = express();
 const server = http.createServer(app);
 
+// Import Socket.IO setup (simplified for serverless)
+const setupSocket = require('./services/websocketClient');
+
 // Middleware
+// More permissive CORS configuration
 app.use(cors({
-  origin: process.env.CLIENT_URL || '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  origin: '*', // Allow all origins in production
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
-app.use(helmet());
+
+// Configure Helmet with less restrictive settings
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
+
 app.use(express.json());
 app.use(morgan('dev'));
 
@@ -40,19 +47,33 @@ app.use('/api', limiter);
 // Routes
 app.use('/api', apiRoutes);
 
-// Initialize Socket.IO with the server
-const io = setupSocket(server);
-
 // Health check endpoint for Vercel
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// 🚀 Let Vercel manage the port assignment
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
+// Root endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'API is running'
+  });
 });
+
+// Initialize Socket.IO only if not in serverless environment
+if (process.env.NODE_ENV !== 'production') {
+  // Initialize Socket.IO with the server
+  const io = setupSocket(server);
+  
+  // Start the server on a specific port for local development
+  const PORT = process.env.PORT || 5000;
+  server.listen(PORT, () => {
+    logger.info(`Server running on port ${PORT}`);
+  });
+} else {
+  // In production/serverless, we don't need to call server.listen()
+  logger.info('Server configured for serverless environment');
+}
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
@@ -60,4 +81,5 @@ process.on('unhandledRejection', (err) => {
   // Don't crash the server
 });
 
-module.exports = { app, server, io };
+// Export for serverless
+module.exports = app;
